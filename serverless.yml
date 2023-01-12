@@ -1,0 +1,88 @@
+org: sharapidinov
+app: aws-node-express-dynamodb-api
+service: aws-node-http-api-project
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  environment:
+    USER_POOL_ID: { Ref: UserPool }
+    CLIENT_ID: { Ref: UserClient }
+    DYNAMODB_CUSTOMER_TABLE: ${self:service}-customerTable-${sls:stage}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:*
+        - cognito-idp:AdminInitiateAuth
+        - cognito-idp:AdminCreateUser
+        - cognito-idp:AdminSetUserPassword
+      Resource: "*"
+
+functions:
+  loginUser:
+    handler: user/login.handler
+    events:
+      - http:
+          path: user/login
+          method: post
+          cors: true
+  signupUser:
+    handler: user/signup.handler
+    events:
+      - http:
+          path: user/signup
+          method: post
+          cors: true
+  privateAPI:
+    handler: user/private.handler
+    events:
+      - http:
+          path: user/private
+          method: post
+          cors: true
+          authorizer:
+            name: PrivateAuthorizer
+            type: COGNITO_USER_POOLS
+            arn:
+              Fn::GetAtt:
+                - UserPool
+                - Arn
+            claims:
+              - email
+
+resources:
+  Resources:
+    ArgenTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: email
+            AttributeType: S
+        BillingMode: PAY_PER_REQUEST
+        KeySchema:
+          - AttributeName: email
+            KeyType: HASH
+        TableName: serverless-dynamodb-tima
+    UserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: serverless-tima
+        Schema:
+          - Name: email
+            Required: true
+            Mutable: true
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 8
+        AutoVerifiedAttributes: [ "email" ]
+    UserClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: user-pool-ui
+        GenerateSecret: false
+        UserPoolId: { Ref: UserPool }
+        AccessTokenValidity: 5
+        IdTokenValidity: 5
+        ExplicitAuthFlows:
+          - "ADMIN_NO_SRP_AUTH"
